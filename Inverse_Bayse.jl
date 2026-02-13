@@ -1,11 +1,5 @@
-# 逆ベイズモデル（正規分布ver）: Python版をJuliaへ移植（効率寄り）
-# 依存: Random のみ（標準）。mu を等間隔グリッドとして保持。
-
 using Random
 
-# 安全な「最大値の候補（ほぼ同値）」からランダムに1つ選ぶ
-# Pythonの np.isclose(P, P.max()) と同等の意図（既定の近さ判定をJuliaで再現）
-# isapprox の既定: rtol = √eps, atol = 0
 @inline function rand_argmax_isclose(P::AbstractVector{T}, rng::AbstractRNG) where {T<:Real}
     # 最大の確信度を取得
     m = maximum(P)
@@ -31,8 +25,6 @@ using Random
     return firstindex(P)  # 到達しない想定
 end
 
-# PDFの正規化定数は argmax に不要なので、指数部だけ計算して高速化
-# P ∝ exp(-(mu-theta)^2/(2*tau))
 @inline function fill_loglik!(P::Vector{Float64}, mu::Vector{Float64}, theta::Float64, tau::Float64)
     inv2tau = 1.0 / (2.0 * tau)
     @inbounds @simd for i in eachindex(mu)
