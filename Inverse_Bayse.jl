@@ -38,97 +38,139 @@ abstract type AbstractBayesModel end
 
 mutable struct InverseBayesV1 <: AbstractBayesModel
     # scalars
-    tau::Float64
-    initial_sigma::Float64
-    sigma::Float64
-    theta::Float64
-    beta::Float64
-    alpha::Float64
+    P::Float64
+    R₀::Float64
+    R::Float64
+    x::Float64
+    β::Float64
+    K::Float64
 
     # grid
-    mu::Vector{Float64}
-    max_mu::Int
+    μ::Vector{Float64}
+    max_μ::Int
 
     # work buffer (確信度ベクトルを毎回確保しない)
     Pbuf::Vector{Float64}
 
     # histories
-    tau_hist::Vector{Float64}
-    theta_hist::Vector{Float64}
-    alpha_hist::Vector{Float64}
-    sigma_hist::Vector{Float64}
-    max_mu_hist::Vector{Float64}
+    P_hist::Vector{Float64}
+    x_hist::Vector{Float64}
+    K_hist::Vector{Float64}
+    R_hist::Vector{Float64}
+    max_μ_hist::Vector{Float64}
 end
 
 mutable struct InverseBayesV2 <: AbstractBayesModel
-    tau::Float64
-    initial_sigma::Float64
-    sigma::Float64
-    theta::Float64
-    beta::Float64
-    alpha::Float64
-    lambda1::Float64
-    lambda2::Float64
-    t::Float64
+    P::Float64
+    R₀::Float64
+    R::Float64
+    x::Float64
+    β::Float64
+    K::Float64
+    λ::Float64
 
     # histories
-    tau_hist::Vector{Float64}
-    theta_hist::Vector{Float64}
-    alpha_hist::Vector{Float64}
-    sigma_hist::Vector{Float64}
-    beta_hist::Vector{Float64}
-    t_hist::Vector{Float64}
+    P_hist::Vector{Float64}
+    x_hist::Vector{Float64}
+    K_hist::Vector{Float64}
+    R_hist::Vector{Float64}
+    β_hist::Vector{Float64}
 
 end
 
-function InverseBayesV1(tau::Real, sigma::Real, theta::Real, beta::Real; bin::Int=50, rng::AbstractRNG=Random.default_rng())
-    # 平均パラメータの信念分布の分散
-    τ = Float64(tau)
-    # 事前分散
-    Σ0 = Float64(sigma)
-    # 事後分散
-    Σ = Float64(sigma)
-    # 平均パラメータ
-    θ = Float64(theta)
-    # ベイズのパラメータ
-    β = Float64(beta)
-    α = 0.0
+mutable struct InverseBayesV3 <: AbstractBayesModel
+    P::Float64
+    R₀::Float64
+    R::Float64
+    x::Float64
+    β::Float64
+    K::Float64
+    λ₁::Float64
+    λ₂::Float64
+    τ::Float64
 
-    mu = collect(range(-2.5, 2.5; length=bin))
+    # histories
+    P_hist::Vector{Float64}
+    x_hist::Vector{Float64}
+    K_hist::Vector{Float64}
+    R_hist::Vector{Float64}
+    β_hist::Vector{Float64}
+    τ_hist::Vector{Float64}
+
+end
+
+# β固定
+function InverseBayesV1(P::Real, R₀::Real, x::Real, β::Real; bin::Int=50, rng::AbstractRNG=Random.default_rng())
+    # 平均パラメータの信念分布の分散
+    P = Float64(P)
+    # 事前分散
+    R₀ = Float64(R₀)
+    # 事後分散
+    R = Float64(R₀)
+    # 平均パラメータ
+    x = Float64(x)
+    # ベイズのパラメータ
+    β = Float64(β)
+    K = 0.0
+
+    μ = collect(range(-2.5, 2.5; length=bin))
     Pbuf = Vector{Float64}(undef, bin)
 
-    fill_loglik!(Pbuf, mu, θ, τ)
+    fill_loglik!(Pbuf, μ, x, P)
     # 確信度が最大のインデックスを保存
     maxidx = rand_argmax_isclose(Pbuf, rng)
 
     return InverseBayesV1(
-        τ, Σ0, Σ, θ, β, α,
-        mu, maxidx,
+        P, R₀, R, x, β, K,
+        μ, maxidx,
         Pbuf,
-        [τ], [θ], [α], [Σ], [mu[maxidx]]
+        [P], [x], [K], [R], [μ[maxidx]]
     )
 end
 
-function InverseBayesV2(tau::Real, sigma::Real, theta::Real, beta::Real, lambda1::Real, lambda2::Real)
+# βを動的更新する
+function InverseBayesV2(P::Real, R₀::Real, x::Real, β::Real, λ::Real)
     # 平均パラメータの信念分布の分散
-    τ = Float64(tau)
+    P = Float64(P)
     # 事前分散
-    Σ0 = Float64(sigma)
+    R₀ = Float64(R₀)
     # 事後分散
-    Σ = Float64(sigma)
+    R = Float64(R₀)
     # 平均パラメータ
-    θ = Float64(theta)
+    x = Float64(x)
     # ベイズのパラメータ
-    β = Float64(beta)
-    α = 0.0
+    β = Float64(β)
+    K = 0.0
     # βの更新規則
-    λ₁ = Float64(lambda1)
-    λ₂ = Float64(lambda2)
-    t = 0.0
+    λ = Float64(λ)
 
     return InverseBayesV2(
-        τ, Σ0, Σ, θ, β, α, λ₁, λ₂, t,
-        [τ], [θ], [α], [Σ], [β], [t]
+        P, R₀, R, x, β, K, λ,
+        [P], [x], [K], [R], [β]
+    )
+end
+
+# βを階層的に動的更新する
+function InverseBayesV3(P::Real, R₀::Real, x::Real, β::Real, λ₁::Real, λ₂::Real)
+    # 平均パラメータの信念分布の分散
+    P = Float64(P)
+    # 事前分散
+    R₀ = Float64(R₀)
+    # 事後分散
+    R = Float64(R₀)
+    # 平均パラメータ
+    x = Float64(x)
+    # ベイズのパラメータ
+    β = Float64(β)
+    K = 0.0
+    # βの更新規則
+    λ₁ = Float64(λ₁)
+    λ₂ = Float64(λ₂)
+    τ = 0.0
+
+    return InverseBayesV3(
+        P, R₀, R, x, β, K, λ₁, λ₂, τ,
+        [P], [x], [K], [R], [β], [τ]
     )
 end
 
@@ -140,36 +182,36 @@ function update!(m::InverseBayesV1, d::Real; rng::AbstractRNG=Random.default_rng
     d = Float64(d)
 
     # 学習率の更新
-    m.alpha = m.tau / (m.tau + (1.0 - m.beta) * m.sigma)
+    m.K = m.P / (m.P + (1.0 - m.β) * m.R)
 
     # ベイズ更新
-    tmp_tau = m.alpha * m.sigma
-    m.theta = (1.0 - m.alpha) * m.theta + m.alpha * d
+    tmp_P = m.K * m.R
+    m.x = (1.0 - m.K) * m.x + m.K * d
 
     # 逆ベイズ更新
-    m.sigma = ((m.sigma + m.tau) / ((1.0 - m.beta) * m.sigma + m.tau)) * m.sigma
+    m.R = ((m.R + m.P) / ((1.0 - m.β) * m.R + m.P)) * m.R
 
     # tauの更新
-    m.tau = tmp_tau
+    m.P = tmp_P
 
     # 確信度計算（正規化省略）
-    fill_loglik!(m.Pbuf, m.mu, m.theta, m.tau)
+    fill_loglik!(m.Pbuf, m.μ, m.x, m.P)
     tmp_max = rand_argmax_isclose(m.Pbuf, rng)
 
     # 最大確信度のチェック
-    if m.max_mu ≠ tmp_max
-        m.sigma = m.initial_sigma
-        m.max_mu = tmp_max
-    elseif m.sigma > 10^10
-        m.sigma = m.initial_sigma
+    if m.max_μ ≠ tmp_max
+        m.R = m.R₀
+        m.max_μ = tmp_max
+    elseif m.R > 10^10
+        m.R = m.R₀
     end
 
     # 履歴保存
-    push!(m.tau_hist, m.tau)
-    push!(m.theta_hist, m.theta)
-    push!(m.alpha_hist, m.alpha)
-    push!(m.sigma_hist, m.sigma)
-    push!(m.max_mu_hist, m.max_mu)
+    push!(m.P_hist, m.P)
+    push!(m.x_hist, m.x)
+    push!(m.K_hist, m.K)
+    push!(m.R_hist, m.R)
+    push!(m.max_μ_hist, m.max_μ)
 
     return m
 end
@@ -177,35 +219,70 @@ end
 function update!(m::InverseBayesV2, d::Real)
     d = Float64(d)
 
-    e = (d - m.theta)^2
+    e² = (d - m.x)^2
 
     # 学習率の更新
-    m.alpha = m.tau / (m.tau + (1.0 - m.beta) * m.sigma)
+    m.K = m.P / (m.P + (1.0 - m.β) * m.R)
 
     # ベイズ更新
-    tmp_tau = m.alpha * m.sigma
-    m.theta = (1.0 - m.alpha) * m.theta + m.alpha * d
+    tmp_P = m.K * m.R
+    m.x = (1.0 - m.K) * m.x + m.K * d
 
     # 逆ベイズ更新
-    m.sigma = ((m.sigma + m.tau) / ((1.0 - m.beta) * m.sigma + m.tau)) * m.sigma
+    m.R = ((m.R + m.P) / ((1.0 - m.β) * m.R + m.P)) * m.R
 
     # tauの更新
-    m.tau = tmp_tau
+    m.P = tmp_P
 
     # βの更新
-    m.beta = max(0, (1 - m.lambda2) * m.beta + m.lambda2 * ((e - 0.5) / (abs(e - 0.5) + 0.5)))
+    m.β = max(0, (1 - m.λ) * m.β + m.λ * ((e² - 0.5) / (abs(e² - 0.5) + 0.5)))
 
-    if m.sigma > 1e20
-        m.sigma = m.initial_sigma
+    if m.R > 1e20
+        m.R = m.R₀
     end
 
     # 履歴保存
-    push!(m.tau_hist, m.tau)
-    push!(m.theta_hist, m.theta)
-    push!(m.alpha_hist, m.alpha)
-    push!(m.sigma_hist, m.sigma)
-    push!(m.beta_hist, m.beta)
-    push!(m.t_hist, m.t)
+    push!(m.P_hist, m.P)
+    push!(m.x_hist, m.x)
+    push!(m.K_hist, m.K)
+    push!(m.R_hist, m.R)
+    push!(m.β_hist, m.β)
+
+end
+
+function update!(m::InverseBayesV3, d::Real)
+    d = Float64(d)
+
+    e² = (d - m.x)^2
+
+    # 学習率の更新
+    m.K = m.P / (m.P + (1.0 - m.β) * m.R)
+
+    # ベイズ更新
+    tmp_P = m.K * m.R
+    m.x = (1.0 - m.K) * m.x + m.K * d
+
+    # 逆ベイズ更新
+    m.R = ((m.R + m.P) / ((1.0 - m.β) * m.R + m.P)) * m.R
+
+    # tauの更新
+    m.P = tmp_P
+
+    # βの更新
+    m.τ = (1 - m.λ₁) * m.τ + λ₁ * min(e², 3.0 * m.τ)
+    m.β = max(0, (1 - m.λ₂) * m.β + m.λ₂ * ((e² - m.τ) / (abs(e² - m.τ) + 0.3 * m.τ)))
+
+    if m.R > 1e20
+        m.R = m.R₀
+    end
+
+    # 履歴保存
+    push!(m.P_hist, m.P)
+    push!(m.x_hist, m.x)
+    push!(m.K_hist, m.K)
+    push!(m.R_hist, m.R)
+    push!(m.β_hist, m.β)
+    push!(m.τ_hist, m.τ)
 
 end
 
