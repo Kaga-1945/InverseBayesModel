@@ -1,5 +1,12 @@
 using Random
 
+#=
+モデルの定義の部分
+V1:β固定
+V2:τ固定, β変動
+v3:
+=#
+
 @inline function rand_argmax_isclose(P::AbstractVector{T}, rng::AbstractRNG) where {T<:Real}
     # 最大の確信度を取得
     m = maximum(P)
@@ -124,12 +131,12 @@ function InverseBayesV1(P::Real, R₀::Real, x::Real, β::Real; bin::Int=50, rng
         P, R₀, R, x, β, K,
         μ, maxidx,
         Pbuf,
-        [P], [x], [K], [R], [μ[maxidx]]
+        [], [], [], [], []
     )
 end
 
 # βを動的更新する
-function InverseBayesV2(P::Real, R₀::Real, x::Real, β::Real, λ::Real)
+function InverseBayesV2(P::Real, R₀::Real, x::Real, λ::Real)
     # 平均パラメータの信念分布の分散
     P = Float64(P)
     # 事前分散
@@ -139,14 +146,14 @@ function InverseBayesV2(P::Real, R₀::Real, x::Real, β::Real, λ::Real)
     # 平均パラメータ
     x = Float64(x)
     # ベイズのパラメータ
-    β = Float64(β)
+    β = 0.0
     K = 0.0
     # βの更新規則
     λ = Float64(λ)
 
     return InverseBayesV2(
         P, R₀, R, x, β, K, λ,
-        [P], [x], [K], [R], [β]
+        [], [], [], [], []
     )
 end
 
@@ -161,16 +168,16 @@ function InverseBayesV3(P::Real, R₀::Real, x::Real, β::Real, λ₁::Real, λ�
     # 平均パラメータ
     x = Float64(x)
     # ベイズのパラメータ
-    β = Float64(β)
+    β = 0.0
     K = 0.0
     # βの更新規則
     λ₁ = Float64(λ₁)
     λ₂ = Float64(λ₂)
-    τ = 0.0
+    τ = 0.5
 
     return InverseBayesV3(
         P, R₀, R, x, β, K, λ₁, λ₂, τ,
-        [P], [x], [K], [R], [β], [τ]
+        [], [], [], [], [], []
     )
 end
 
@@ -235,9 +242,9 @@ function update!(m::InverseBayesV2, d::Real)
     m.P = tmp_P
 
     # βの更新
-    m.β = max(0, (1 - m.λ) * m.β + m.λ * ((e² - 0.5) / (abs(e² - 0.5) + 0.5)))
+    m.β = max(0, (1 - m.λ) * m.β + m.λ * ((e² - 0.1) / (abs(e² - 0.1) + 0.5)))
 
-    if m.R > 1e20
+    if m.R > 1e10
         m.R = m.R₀
     end
 
@@ -253,26 +260,33 @@ end
 function update!(m::InverseBayesV3, d::Real)
     d = Float64(d)
 
+    # 予測誤差
     e² = (d - m.x)^2
 
     # 学習率の更新
     m.K = m.P / (m.P + (1.0 - m.β) * m.R)
 
     # ベイズ更新
+    # 事後分散の計算
     tmp_P = m.K * m.R
+
+    # 推定値の更新
     m.x = (1.0 - m.K) * m.x + m.K * d
 
     # 逆ベイズ更新
     m.R = ((m.R + m.P) / ((1.0 - m.β) * m.R + m.P)) * m.R
 
-    # tauの更新
+    # 事後分散の更新
     m.P = tmp_P
 
-    # βの更新
+    # 基準値の更新
     m.τ = (1 - m.λ₁) * m.τ + λ₁ * min(e², 3.0 * m.τ)
+
+    # βの更新
     m.β = max(0, (1 - m.λ₂) * m.β + m.λ₂ * ((e² - m.τ) / (abs(e² - m.τ) + 0.3 * m.τ)))
 
-    if m.R > 1e20
+    # 事後分散のリセット
+    if m.R > 10^10
         m.R = m.R₀
     end
 

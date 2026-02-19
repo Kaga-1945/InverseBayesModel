@@ -3,7 +3,7 @@
 using Random
 
 """
-    generate_steady_series(loc, scale, size; rng=Random.default_rng())
+generate_steady_series(loc, scale, size; rng=Random.default_rng())
 
 定常環境の生成
 - loc   : 平均
