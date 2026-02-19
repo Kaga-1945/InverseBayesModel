@@ -261,7 +261,8 @@ function update!(m::InverseBayesV3, d::Real)
     d = Float64(d)
 
     # 予測誤差
-    e² = (d - m.x)^2
+    e = (d - m.x)
+    e² = e^2
 
     # 学習率の更新
     m.K = m.P / (m.P + (1.0 - m.β) * m.R)
@@ -271,7 +272,8 @@ function update!(m::InverseBayesV3, d::Real)
     tmp_P = m.K * m.R
 
     # 推定値の更新
-    m.x = (1.0 - m.K) * m.x + m.K * d
+    #m.x = (1.0 - m.K) * m.x + m.K * d
+    m.x = m.x + m.K * e
 
     # 逆ベイズ更新
     m.R = ((m.R + m.P) / ((1.0 - m.β) * m.R + m.P)) * m.R
@@ -280,7 +282,7 @@ function update!(m::InverseBayesV3, d::Real)
     m.P = tmp_P
 
     # 基準値の更新
-    m.τ = (1 - m.λ₁) * m.τ + λ₁ * min(e², 3.0 * m.τ)
+    m.τ = (1 - m.λ₁) * m.τ + λ₁ * min(e², 5.0 * m.τ)
 
     # βの更新
     m.β = max(0, (1 - m.λ₂) * m.β + m.λ₂ * ((e² - m.τ) / (abs(e² - m.τ) + 0.3 * m.τ)))

@@ -43,7 +43,7 @@ function main()
     end
 
     # 推定値の推移をプロットする
-    plot_all_hist(model, loc_line_s, string(typeof(model)), condition)
+    plot_all_hist(model, loc_line_s, scale_line, string(typeof(model)), condition)
 
 end
 

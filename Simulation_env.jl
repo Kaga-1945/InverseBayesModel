@@ -29,7 +29,9 @@ function generate_steady_series(loc::Real, scale::Real, size::Integer; rng::Abst
     end
 
     loc_line = fill(μ, n)  # loc を size 個並べる
-    return samples, loc_line
+    scale_line = fill(σ, n)
+
+    return samples, loc_line, scale_line
 end
 
 """
@@ -59,6 +61,7 @@ function generate_unsteady_series(upper_loc::Real, lower_loc::Real, scale::Real,
 
     samples = Vector{Float64}(undef, n)
     loc_line = Vector{Float64}(undef, n)
+    scale_line = fill(σ, n)
     priod = Int[]  # 変更点のインデックスを格納
 
     t = 0
@@ -79,5 +82,44 @@ function generate_unsteady_series(upper_loc::Real, lower_loc::Real, scale::Real,
         t += 1
     end
 
-    return samples, loc_line, priod
+    return samples, loc_line, scale_line, priod
+end
+
+function generate_unsteady_series_2(upper_loc::Real, lower_loc::Real, upper_scale::Real, lower_scale::Real, size::Integer;
+    rng::AbstractRNG=Random.default_rng(), SEED::Int64=123)
+    Random.seed!(SEED)
+    upper_loc = Float64(upper_loc)
+    lower_loc = Float64(lower_loc)
+
+    upper_scale = Float64(upper_scale)
+    lower_scale = Float64(lower_scale)
+    n = Int(size)
+
+    samples = Vector{Float64}(undef, n)
+    loc_line = Vector{Float64}(undef, n)
+    scale_line = Vector{Float64}(undef, n)
+    priod = Int[]  # 変更点のインデックスを格納
+
+    t = 0
+    μ = lower_loc + (upper_loc - lower_loc) * rand(rng)
+    σ = lower_scale + (upper_scale - lower_scale) * rand(rng)
+
+    @inbounds for i in 1:n
+        # 0.1%で平均を変更させる
+        if rand(rng) < 0.001 && t > 500
+            # 平均値を更新
+            μ = lower_loc + (upper_loc - lower_loc) * rand(rng)
+            σ = lower_scale + (upper_scale - lower_scale) * rand(rng)
+            # インデックスを記録する
+            push!(priod, i)
+            # カウントをリセット
+            t = 0
+        end
+        samples[i] = μ + σ * randn(rng)
+        loc_line[i] = μ
+        scale_line[i] = σ
+        t += 1
+    end
+
+    return samples, loc_line, scale_line, priod
 end

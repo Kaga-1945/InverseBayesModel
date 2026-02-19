@@ -11,12 +11,18 @@ R = 1.0
 x = 0.0
 β = 0.05
 bin = 50
-λ₁ = 0.001
-λ₂ = 0.2
+
+# τの更新パラメータ
+λ₁ = 0.01
+
+# βの更新パラメータ
+λ₂ = 0.1
 
 μᵤ = 2.5
 μₗ = -2.5
-σ = 0.3
+σᵤ = 1.0
+σₗ = 0.0
+
 
 
 folder = "figures"
@@ -32,7 +38,7 @@ function main()
     model_name = string(nameof(typeof(model)))
     condition = "Unsteady"
     # データを生成
-    samples_s, loc_line_s, scale_line = generate_unsteady_series(μₗ, μᵤ, σ, TIME, SEED=1919)
+    samples_s, loc_line, scale_line = generate_unsteady_series_2(μₗ, μᵤ, σₗ, σᵤ, TIME, SEED=1919)
 
     # シミュレーション 
     @inbounds @simd for d in samples_s
@@ -41,7 +47,7 @@ function main()
     end
 
     # 推定値の推移をプロットする
-    plot_all_hist(model, loc_line_s, scale_line, string(typeof(model)), condition)
+    plot_all_hist(model, loc_line, scale_line, string(typeof(model)), condition)
 
 end
 
