@@ -12,14 +12,14 @@ R = 1.0
 x = 0.0
 β = 0.05
 bin = 50
-λ₁ = 0.001
-λ₂ = 0.001
+λ₁ = 0.01
+λ₂ = 0.1
 
 
 #=環境のパラメータ=#
 TIME = 10000
 μ = 0.0
-σ = 0.5
+σ = 0.3
 
 folder = "figures"
 
@@ -34,7 +34,7 @@ function main()
     model_name = string(nameof(typeof(model)))
     condition = "Steady"
     # データを生成
-    samples_s, loc_line_s = generate_steady_series(μ, σ, TIME)
+    samples_s, loc_line_s, scale_line = generate_steady_series(μ, σ, TIME)
 
     # シミュレーション 
     @inbounds @simd for d in samples_s

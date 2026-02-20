@@ -95,6 +95,8 @@ mutable struct InverseBayesV3 <: AbstractBayesModel
     λ₁::Float64
     λ₂::Float64
     τ::Float64
+    c::Float64
+    k::Float64
 
     # histories
     P_hist::Vector{Float64}
@@ -158,7 +160,7 @@ function InverseBayesV2(P::Real, R₀::Real, x::Real, λ::Real)
 end
 
 # βを階層的に動的更新する
-function InverseBayesV3(P::Real, R₀::Real, x::Real, β::Real, λ₁::Real, λ₂::Real)
+function InverseBayesV3(P::Real, R₀::Real, x::Real, β::Real, λ₁::Real, λ₂::Real; c::Real=10^10, k::Real=0.3)
     # 平均パラメータの信念分布の分散
     P = Float64(P)
     # 事前分散
@@ -174,9 +176,11 @@ function InverseBayesV3(P::Real, R₀::Real, x::Real, β::Real, λ₁::Real, λ�
     λ₁ = Float64(λ₁)
     λ₂ = Float64(λ₂)
     τ = 0.5
+    c = Float64(c)
+    k = Float64(k)
 
     return InverseBayesV3(
-        P, R₀, R, x, β, K, λ₁, λ₂, τ,
+        P, R₀, R, x, β, K, λ₁, λ₂, τ, c, k,
         [], [], [], [], [], []
     )
 end
@@ -275,17 +279,18 @@ function update!(m::InverseBayesV3, d::Real)
     #m.x = (1.0 - m.K) * m.x + m.K * d
     m.x = m.x + m.K * e
 
-    # 逆ベイズ更新
-    m.R = ((m.R + m.P) / ((1.0 - m.β) * m.R + m.P)) * m.R
+    #m.R = ((m.R + m.P) / ((1.0 - m.β) * m.R + m.P)) * m.R
+    m.R = max(1e-10, ((m.R + m.P) / ((1.0 - m.β) * m.R + m.P)) * m.R - 0.1 * (m.R - 0))
+    #m.R = ((m.R + m.P) / ((1.0 - m.β) * m.R + m.P)) * m.R * (1 - m.R / 10^10)
 
     # 事後分散の更新
     m.P = tmp_P
 
     # 基準値の更新
-    m.τ = (1 - m.λ₁) * m.τ + λ₁ * min(e², 5.0 * m.τ)
+    m.τ = (1 - m.λ₁) * m.τ + λ₁ * min(e², m.c * m.τ)
 
     # βの更新
-    m.β = max(0, (1 - m.λ₂) * m.β + m.λ₂ * ((e² - m.τ) / (abs(e² - m.τ) + 0.3 * m.τ)))
+    m.β = max(0, (1 - m.λ₂) * m.β + m.λ₂ * ((e² - m.τ) / (abs(e² - m.τ) + m.k * m.τ)))
 
     # 事後分散のリセット
     if m.R > 10^10
